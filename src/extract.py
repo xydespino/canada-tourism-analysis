@@ -1,45 +1,80 @@
-import requests
+"""Extract stage: download a StatCan table via the WDS API and unzip it into data/raw."""
+
+# Standard library imports first...
 import io
 import zipfile
 from pathlib import Path
 
+# ...then third-party packages (these need installing)...
+import requests
+
+# ...then our own project modules.
+# Shared settings live in config.py (same folder, so a plain import works)
+from config import RAW_DIR, TABLE_ID
+
+# Base address of StatCan's Web Data Service (WDS) REST API
 WDS_BASE = "https://www150.statcan.gc.ca/t1/wds/rest"
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-RAW_DIR = PROJECT_ROOT / "data" / "raw"
 
 
 def get_table_url(table_id: str) -> str:
     """Ask the StatCan WDS API where the full-table CSV zip lives."""
+    # Build the endpoint, e.g. .../getFullTableDownloadCSV/24100051/en
     url = f"{WDS_BASE}/getFullTableDownloadCSV/{table_id}/en"
 
-    # TODO 1: make the GET request (add a timeout, see below)
-    response = requests.get(url, timeout=10)  # timeout in seconds
-    # TODO 2: fail loudly if the HTTP request itself failed
+    # Call the API. The timeout stops the script hanging forever if StatCan goes quiet
+    response = requests.get(url, timeout=10)
+
+    # Layer 1: did the delivery work? Raises on HTTP errors like 404 or 500
     response.raise_for_status()
-    # TODO 3: turn the response into a Python dictionary
+
+    # Turn the JSON text into a Python dictionary
     data = response.json()
-    # TODO 4: if the "status" isn't "SUCCESS", raise an error with a clear message
+
+    # Layer 2: did StatCan say the operation succeeded?
+    # .get() returns None if "status" is missing, which also counts as a failure
     if data.get("status") != "SUCCESS":
         raise ValueError(f"Failed to retrieve table URL for {table_id}: {data}")
-    # TODO 5: return the zip URL
+
+    # The zip URL lives under "object". Square brackets (not .get) so a
+    # missing key fails immediately instead of quietly returning None
     return data["object"]
+
 
 def download_and_extract(zip_url: str, dest_dir: Path) -> list[Path]:
     """Download a zip file and extract its contents into dest_dir."""
-    # TODO 1: make sure dest_dir exists (create it if not)
+    # Create the folder if needed. parents=True builds missing parent folders,
+    # exist_ok=True means re-running doesn't crash (the step is idempotent)
     dest_dir.mkdir(parents=True, exist_ok=True)
-    # TODO 2: download the zip (longer timeout, and check for HTTP errors)
-    response = requests.get(zip_url, timeout=30)  # longer timeout for larger files
+
+    # Download the zip. The timeout covers gaps between chunks, not the total time,
+    # so a large file that keeps streaming won't trip it
+    response = requests.get(zip_url, timeout=30)
+
+    # Catches a bad table ID here: the API happily returns a URL for any ID,
+    # but downloading a file that doesn't exist gives a 404
     response.raise_for_status()
-    # TODO 3: wrap the bytes so zipfile can read them, then open the zip
+
+    # Report the size so scheduled runs leave a useful log line
+    size_mb = len(response.content) / 1_000_000
+    print(f"Downloaded {size_mb:.1f} MB")
+
+    # BytesIO makes the downloaded bytes behave like a file, so zipfile can
+    # read them without saving the zip to disk. The "with" block closes the
+    # zip automatically, even if extraction fails partway through
     with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
-        # TODO 4: extract everything into dest_dir
+        # Only safe because we trust the source: a malicious zip could try
+        # to write files outside dest_dir
         zf.extractall(dest_dir)
-        # TODO 5: return the paths of the extracted files
+
+        # Full paths of everything extracted (the data CSV and the metadata CSV)
         return [dest_dir / name for name in zf.namelist()]
 
-    
+
+# Runs only when this file is executed directly (python src/extract.py),
+# not when another script imports its functions
 if __name__ == "__main__":
-    zip_url = get_table_url("24100051")
+    zip_url = get_table_url(TABLE_ID)
     files = download_and_extract(zip_url, RAW_DIR)
-    print(files)
+    print(f"Extracted {len(files)} files:")
+    for f in files:
+        print(f"  {f.name}")  # .name shows just the file name, not the full path
