@@ -5,6 +5,8 @@ import pandas as pd
 
 from config import PROCESSED_DIR, RAW_DIR, TABLE_ID
 
+# GEO member ID for Canada (the national total); 2 to 5 are the provinces
+CANADA_GEO_ID = 1
 # The top-level member ("All visitors") has this ID in the country dimension
 ROOT_ID = 1
 
@@ -108,6 +110,8 @@ def build_dim_country(members: pd.DataFrame) -> pd.DataFrame:
     name_of = dict(zip(dim["member_id"], dim["name"]))
     parent_of = dict(zip(dim["member_id"], dim["parent_id"]))
 
+    
+
     def path_to_root(member_id: int) -> list[str]:
         """Follow parent links up to the root, then reverse: root first."""
         path = []
@@ -130,15 +134,102 @@ def build_dim_country(members: pd.DataFrame) -> pd.DataFrame:
     dim["country"] = paths.map(lambda p: level(p, 4))
 
     return dim.sort_values("member_id").reset_index(drop=True)
+def build_dim_geo(members: pd.DataFrame) -> pd.DataFrame:
+    """Geography dimension: Canada and the four provincial groupings."""
+    return (
+        members[members["dimension_id"] == 1]            # dimension 1 = Geography
+        .rename(columns={"member_id": "geo_id", "name": "geography"})
+        [["geo_id", "geography"]]
+        .reset_index(drop=True)
+    )
 
+
+def add_balancing(data: pd.DataFrame, dim_country: pd.DataFrame) -> pd.DataFrame:
+    """Return leaf rows plus balancing rows for one slice of data.
+
+    Works at any grain, because a member counts as a leaf only if none of
+    its children have data in the same month and geography.
+    """
+    keys = ["date", "geo_id", "parent_id"]
+    cols = ["date", "geo_id", "member_id", "visitors"]
+
+    # 1. Drop "not available" rows, so they can't make a GEO look deeper than it is
+    data = data.dropna(subset=["visitors"])
+
+    # Parent links for real members only. Dropping the root (no parent) and
+    # casting to plain int makes the IDs match member_id's type for joins
+    links = (
+        dim_country.loc[~dim_country["is_balancing"], ["member_id", "parent_id"]]
+        .dropna(subset=["parent_id"])
+        .astype({"parent_id": "int64"})
+    )
+
+    # 2. Attach each row's parent, then add up the children under each parent
+    children = (
+        data.merge(links, on="member_id")                 # inner join: root drops out
+        .groupby(keys, as_index=False)["visitors"].sum()
+        .rename(columns={"visitors": "children_visitors"})
+    )
+
+    # The parent's own published value, renamed so it lines up with those sums
+    parent_values = data.rename(
+        columns={"member_id": "parent_id", "visitors": "parent_visitors"}
+    )[keys + ["parent_visitors"]]
+
+    # 3. Balancing row = published parent minus the sum of its children
+    balancing = children.merge(parent_values, on=keys)
+    balancing["visitors"] = balancing["parent_visitors"] - balancing["children_visitors"]
+    balancing["member_id"] = balancing["parent_id"] + BALANCING_OFFSET
+
+    # 4. Leaves = rows that are NOT a parent of anything present (an anti-join).
+    # indicator=True adds a "_merge" column saying where each row was found
+    parents_present = children[keys].rename(columns={"parent_id": "member_id"})
+    flagged = data.merge(
+        parents_present, on=["date", "geo_id", "member_id"], how="left", indicator=True
+    )
+    leaves = flagged[flagged["_merge"] == "left_only"]   # no match = not a parent = leaf
+
+    # Stack real leaves and balancing rows into one table
+    return (
+        pd.concat([leaves[cols], balancing[cols]], ignore_index=True)
+        .sort_values(["date", "geo_id", "member_id"])
+        .reset_index(drop=True)
+    )
+
+
+def build_facts(data: pd.DataFrame, dim_country: pd.DataFrame):
+    """Split the data into its two grains and balance each one."""
+    national = data[data["geo_id"] == CANADA_GEO_ID]
+    provincial = data[data["geo_id"] != CANADA_GEO_ID]
+
+    # National grain: GEO is always Canada, so the column adds nothing; drop it
+    fact_country = add_balancing(national, dim_country).drop(columns="geo_id")
+
+    # Provincial grain: keep geo_id to link to dim_geo
+    fact_province = add_balancing(provincial, dim_country)
+
+    return fact_country, fact_province
 
 if __name__ == "__main__":
+    data = load_data()
     members = load_members()
     dim_country = build_dim_country(members)
+    dim_geo = build_dim_geo(members)
+    fact_country, fact_province = build_facts(data, dim_country)
 
-    # Spot-check a few interesting members: the US, a deep country,
-    # a region-leaf, and some balancing members
-    check_ids = [2, 6, 8, 28, 1009, 1003, 1001]
-    cols = ["member_id", "name", "depth", "market", "continent", "region", "country"]
-    print(dim_country[dim_country["member_id"].isin(check_ids)][cols].to_string())
-    print(f"\n{len(dim_country)} members in total")
+    print(f"fact_country:  {fact_country.shape}")
+    print(f"fact_province: {fact_province.shape}")
+
+    # Compare with your notebook: Other Caribbean in July 2024 should be 5,902
+    july = fact_country[fact_country["date"] == "2024-07-01"]
+    print(july[july["member_id"] == 1009])
+
+    # The big test: do the leaves add up to the published total?
+    published = data.loc[
+        (data["date"] == "2024-07-01")
+        & (data["geo_id"] == CANADA_GEO_ID)
+        & (data["member_id"] == ROOT_ID),
+        "visitors",
+    ].iloc[0]
+    print(f"Leaves sum: {july['visitors'].sum():,.0f}")
+    print(f"Published:  {published:,.0f}")
