@@ -1,7 +1,9 @@
+"""Transform stage: turn raw StatCan files into a validated star schema."""
+
 import re
+import pandas as pd
 from io import StringIO
 
-import pandas as pd
 
 from config import PROCESSED_DIR, RAW_DIR, TABLE_ID
 
@@ -134,6 +136,8 @@ def build_dim_country(members: pd.DataFrame) -> pd.DataFrame:
     dim["country"] = paths.map(lambda p: level(p, 4))
 
     return dim.sort_values("member_id").reset_index(drop=True)
+
+
 def build_dim_geo(members: pd.DataFrame) -> pd.DataFrame:
     """Geography dimension: Canada and the four provincial groupings."""
     return (
@@ -263,7 +267,8 @@ def save(tables: dict[str, pd.DataFrame]) -> None:
         table.to_csv(path, index=False)                # index=False: don't write pandas' row numbers
         print(f"Saved {name}: {len(table):,} rows")
 
-if __name__ == "__main__":
+def main() -> None:
+    """Run the whole Transform stage: build, validate, then save."""
     data = load_data()
     members = load_members()
 
@@ -280,3 +285,7 @@ if __name__ == "__main__":
         "fact_country": fact_country,
         "fact_province": fact_province,
     })
+
+
+if __name__ == "__main__":
+    main()
