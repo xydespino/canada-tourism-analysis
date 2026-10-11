@@ -210,26 +210,73 @@ def build_facts(data: pd.DataFrame, dim_country: pd.DataFrame):
 
     return fact_country, fact_province
 
+
+def validate(data: pd.DataFrame, fact_country: pd.DataFrame,
+             fact_province: pd.DataFrame, tolerance: float = 0.5) -> None:
+    """Stop the pipeline if leaves don't add up to the published totals,
+    and report any negative balancing values."""
+
+    # Published totals = the root member ("All visitors"), wherever it has a value
+    published = data[(data["member_id"] == ROOT_ID) & data["visitors"].notna()]
+
+    # --- Check 1: national leaves sum to the national total, every month ---
+    national_sum = fact_country.groupby("date")["visitors"].sum()
+    national_pub = published[published["geo_id"] == CANADA_GEO_ID].set_index("date")["visitors"]
+
+    # fill_value=0: a month missing from either side shows up as a big
+    # difference instead of being silently skipped
+    national_diff = national_sum.sub(national_pub, fill_value=0).abs()
+    if national_diff.max() > tolerance:
+        raise ValueError(f"National leaves don't match totals:\n{national_diff[national_diff > tolerance]}")
+
+    # --- Check 2: the same thing for every province, every month ---
+    keys = ["date", "geo_id"]
+    province_sum = fact_province.groupby(keys)["visitors"].sum()
+    province_pub = published[published["geo_id"] != CANADA_GEO_ID].set_index(keys)["visitors"]
+
+    province_diff = province_sum.sub(province_pub, fill_value=0).abs()
+    if province_diff.max() > tolerance:
+        raise ValueError(f"Provincial leaves don't match totals:\n{province_diff[province_diff > tolerance]}")
+
+    print(f"Totals reconcile: {len(national_sum)} months national, "
+          f"{len(province_sum)} month-province pairs")
+
+    # --- Check 3: report negative balancing values (don't change them) ---
+    # Stack both facts; the national one gets geo_id back just for reporting
+    all_facts = pd.concat([fact_country.assign(geo_id=CANADA_GEO_ID), fact_province])
+    negatives = all_facts[
+        (all_facts["member_id"] > BALANCING_OFFSET) & (all_facts["visitors"] < 0)
+    ]
+
+    if negatives.empty:
+        print("No negative balancing values")
+    else:
+        print(f"WARNING: {len(negatives)} negative balancing values. Most negative:")
+        print(negatives.nsmallest(5, "visitors").to_string(index=False))
+
+
+def save(tables: dict[str, pd.DataFrame]) -> None:
+    """Write each table to data/processed/ as a CSV for Power BI."""
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)   # same idempotent pattern as extract
+    for name, table in tables.items():
+        path = PROCESSED_DIR / f"{name}.csv"
+        table.to_csv(path, index=False)                # index=False: don't write pandas' row numbers
+        print(f"Saved {name}: {len(table):,} rows")
+
 if __name__ == "__main__":
     data = load_data()
     members = load_members()
+
     dim_country = build_dim_country(members)
     dim_geo = build_dim_geo(members)
     fact_country, fact_province = build_facts(data, dim_country)
 
-    print(f"fact_country:  {fact_country.shape}")
-    print(f"fact_province: {fact_province.shape}")
+    # Validate BEFORE saving: bad data should never reach data/processed
+    validate(data, fact_country, fact_province)
 
-    # Compare with your notebook: Other Caribbean in July 2024 should be 5,902
-    july = fact_country[fact_country["date"] == "2024-07-01"]
-    print(july[july["member_id"] == 1009])
-
-    # The big test: do the leaves add up to the published total?
-    published = data.loc[
-        (data["date"] == "2024-07-01")
-        & (data["geo_id"] == CANADA_GEO_ID)
-        & (data["member_id"] == ROOT_ID),
-        "visitors",
-    ].iloc[0]
-    print(f"Leaves sum: {july['visitors'].sum():,.0f}")
-    print(f"Published:  {published:,.0f}")
+    save({
+        "dim_country": dim_country,
+        "dim_geo": dim_geo,
+        "fact_country": fact_country,
+        "fact_province": fact_province,
+    })
