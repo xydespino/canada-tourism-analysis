@@ -1,0 +1,20 @@
+relationship AutoDetected_07162db4-3ccf-420c-b9aa-58a1640daeff
+	fromColumn: fact_province.geo_id
+	toColumn: dim_geo.geo_id
+
+relationship b4944993-0350-b68f-f449-f0eb2251dd7e
+	fromColumn: fact_province.date
+	toColumn: dim_date.Date
+
+relationship b0ba6c42-a70e-15fc-d707-2f0a4b4fc72a
+	fromColumn: fact_country.date
+	toColumn: dim_date.Date
+
+relationship b64ffdaa-9758-66d3-d264-1ed4dc823e2d
+	fromColumn: fact_country.member_id
+	toColumn: dim_country.member_id
+
+relationship 6528069d-9833-b322-1b54-9b934e6c21c5
+	fromColumn: fact_province.member_id
+	toColumn: dim_country.member_id
+

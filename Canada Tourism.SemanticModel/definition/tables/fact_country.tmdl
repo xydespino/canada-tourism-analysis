@@ -1,0 +1,68 @@
+table fact_country
+	lineageTag: 2bbddfb1-677d-4fff-9333-fc8840ce3aaa
+
+	column date
+		dataType: dateTime
+		isHidden
+		formatString: Long Date
+		lineageTag: b2bc976d-6439-4b5a-9356-3342768ce802
+		summarizeBy: none
+		sourceColumn: date
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column member_id
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 6abd4c79-d567-4792-a57c-a1b1676e5b09
+		summarizeBy: none
+		sourceColumn: member_id
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column visitors
+		dataType: int64
+		formatString: 0
+		lineageTag: d738592e-ff45-4130-a214-30b6e86369d2
+		summarizeBy: sum
+		sourceColumn: visitors
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_country = m
+		mode: import
+		source =
+				let
+				    // Read the CSV from the folder set in the ProcessedFolder parameter.
+				    // No fixed column count, so new columns from the pipeline come through;
+				    // QuoteStyle.Csv respects quoted values that contain commas
+				    Source = Csv.Document(
+				        File.Contents(ProcessedFolder & "fact_country.csv"),
+				        [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]
+				    ),
+				
+				    // The first row holds the column names
+				    #"Use first row as headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				
+				    // Explicit types: date (not datetime) so it joins cleanly to the date table;
+				    // whole numbers for the key and the visitor counts
+				    #"Set column types" = Table.TransformColumnTypes(
+				        #"Use first row as headers",
+				        {
+				            {"date", type date},
+				            {"member_id", Int64.Type},
+				            {"visitors", Int64.Type}
+				        }
+				    )
+				in
+				    #"Set column types"
+
+	annotation PBI_ResultType = Table
+

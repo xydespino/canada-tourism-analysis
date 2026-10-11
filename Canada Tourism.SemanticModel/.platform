@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "SemanticModel",
+    "displayName": "Canada Tourism"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "a6aa996c-26ad-4600-bfe1-a43ba2bdc992"
+  }
+}

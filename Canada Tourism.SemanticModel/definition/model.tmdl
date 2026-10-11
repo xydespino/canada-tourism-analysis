@@ -1,0 +1,23 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-US
+	valueFilterBehavior: independent
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation __PBI_TimeIntelligenceEnabled = 1
+
+annotation PBI_ProTooling = ["DevMode"]
+
+annotation PBI_QueryOrder = ["ProcessedFolder","fact_country","fact_province","dim_country","dim_geo"]
+
+ref table fact_country
+ref table fact_province
+ref table dim_country
+ref table dim_geo
+ref table dim_date
+
+ref cultureInfo en-US
+

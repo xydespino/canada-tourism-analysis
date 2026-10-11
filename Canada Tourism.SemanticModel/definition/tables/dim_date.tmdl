@@ -1,0 +1,86 @@
+table dim_date
+	lineageTag: 31dc8887-34be-4f3c-8f8b-114e0188e759
+	dataCategory: Time
+
+	column Date
+		isKey
+		formatString: General Date
+		lineageTag: 64b7ece8-7b26-4e7b-97ff-6b6e6d3c1ffd
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Date]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Year
+		formatString: 0
+		lineageTag: a6159429-bb8a-4326-ab36-7a71aececd00
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Year]
+
+		annotation SummarizationSetBy = User
+
+	column Quarter
+		lineageTag: bcc5499f-07d3-46bc-a5dd-fa9d6b89bff6
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Quarter]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Month Number'
+		formatString: 0
+		lineageTag: abde5cc4-b1f5-45ef-a06b-fb1b7c697120
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Month Number]
+
+		annotation SummarizationSetBy = User
+
+	column Month
+		lineageTag: bcd7f69b-b28b-4caa-bbfa-11974843c366
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Month]
+		sortByColumn: 'Month Number'
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Year Month'
+		lineageTag: 03286896-c1aa-4e69-ad1b-7e9c15210687
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Year Month]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Month Start'
+		formatString: General Date
+		lineageTag: 472cc31b-e2b7-41b0-81cb-68a0299d80fb
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Month Start]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition dim_date = calculated
+		mode: import
+		source =
+				
+				/* Full calendar years around the data: time intelligence needs complete years */
+				VAR CalendarStart = DATE ( YEAR ( MIN ( fact_country[date] ) ), 1, 1 )
+				VAR CalendarEnd   = DATE ( YEAR ( MAX ( fact_country[date] ) ), 12, 31 )
+				RETURN
+				    ADDCOLUMNS (
+				        CALENDAR ( CalendarStart, CalendarEnd ),     /* one row per day */
+				        "Year",         YEAR ( [Date] ),
+				        "Quarter",      "Q" & QUARTER ( [Date] ),
+				        "Month Number", MONTH ( [Date] ),            /* used to sort Month */
+				        "Month",        FORMAT ( [Date], "mmm" ),
+				        "Year Month",   FORMAT ( [Date], "yyyy-mm" ),
+				        "Month Start",  DATE ( YEAR ( [Date] ), MONTH ( [Date] ), 1 )
+				    )
+
+	annotation PBI_Id = 09f84e35c3cc42f887df8f804947c9c2
+

@@ -1,0 +1,80 @@
+table fact_province
+	lineageTag: c14b67bc-ef41-4b71-b348-1dedb267347c
+
+	column date
+		dataType: dateTime
+		isHidden
+		formatString: Long Date
+		lineageTag: e3528e4f-4d5c-4053-a637-a8cb5c7aae8d
+		summarizeBy: none
+		sourceColumn: date
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column member_id
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: e2c11f41-50b8-4119-a8cc-787c611133d8
+		summarizeBy: none
+		sourceColumn: member_id
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column visitors
+		dataType: int64
+		formatString: 0
+		lineageTag: 905fc546-b599-4969-8839-1d29de456335
+		summarizeBy: sum
+		sourceColumn: visitors
+
+		annotation SummarizationSetBy = Automatic
+
+	column geo_id
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 3d99a3d1-67f3-4146-ba1f-149136953ae0
+		summarizeBy: none
+		sourceColumn: geo_id
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_province = m
+		mode: import
+		source =
+				let
+				    // Read the CSV from the folder set in the ProcessedFolder parameter.
+				    // No fixed column count, so new columns from the pipeline come through;
+				    // QuoteStyle.Csv respects quoted values that contain commas
+				    Source = Csv.Document(
+				        File.Contents(ProcessedFolder & "fact_province.csv"),
+				        [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]
+				    ),
+				
+				    // The first row holds the column names
+				    #"Use first row as headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				
+				    // Same as fact_country, plus geo_id, the key to dim_geo
+				    #"Set column types" = Table.TransformColumnTypes(
+				        #"Use first row as headers",
+				        {
+				            {"date", type date},
+				            {"geo_id", Int64.Type},
+				            {"member_id", Int64.Type},
+				            {"visitors", Int64.Type}
+				        }
+				    )
+				in
+				    #"Set column types"
+
+	annotation PBI_ResultType = Table
+

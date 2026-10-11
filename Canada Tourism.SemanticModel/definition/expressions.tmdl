@@ -1,0 +1,10 @@
+/// Full path to data\processed\ with trailing backslash. Change this after cloning the repo.
+expression ProcessedFolder =
+		let
+		    Source = "C:\Users\XydEspino\Desktop\Canada Tourism\data\processed\" meta [IsParameterQuery = true, IsParameterQueryRequired = true, Type = type text]
+		in
+		    Source
+	lineageTag: baeb226d-ac44-48ad-98a8-bfc2477b18cd
+
+	annotation PBI_ResultType = Text
+

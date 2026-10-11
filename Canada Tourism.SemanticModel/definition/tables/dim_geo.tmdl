@@ -1,0 +1,43 @@
+table dim_geo
+	lineageTag: 6477af08-4396-4aac-b116-17afb815b733
+
+	column geo_id
+		dataType: int64
+		formatString: 0
+		lineageTag: d49cb25e-9b32-4272-993b-b6ad46af2bf6
+		summarizeBy: none
+		sourceColumn: geo_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column geography
+		dataType: string
+		lineageTag: fe4dc622-0343-4b11-b5f4-51f2a65e99c4
+		summarizeBy: none
+		sourceColumn: geography
+
+		annotation SummarizationSetBy = Automatic
+
+	partition dim_geo = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(
+				        File.Contents(ProcessedFolder & "dim_geo.csv"),
+				        [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]
+				    ),
+				
+				    #"Use first row as headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				
+				    #"Set column types" = Table.TransformColumnTypes(
+				        #"Use first row as headers",
+				        {
+				            {"geo_id", Int64.Type},
+				            {"geography", type text}
+				        }
+				    )
+				in
+				    #"Set column types"
+
+	annotation PBI_ResultType = Table
+

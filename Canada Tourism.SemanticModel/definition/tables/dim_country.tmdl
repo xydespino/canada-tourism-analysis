@@ -1,0 +1,130 @@
+table dim_country
+	lineageTag: 49feb165-dd69-41ea-b8c6-0dadf6a8631b
+
+	column member_id
+		dataType: int64
+		formatString: 0
+		lineageTag: 2d27e857-368a-4b9f-9746-e4d795bccc9e
+		summarizeBy: none
+		sourceColumn: member_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column name
+		dataType: string
+		lineageTag: 25e543be-5740-4a58-910b-426bbbd54e4d
+		summarizeBy: none
+		sourceColumn: name
+
+		annotation SummarizationSetBy = Automatic
+
+	column parent_id
+		dataType: int64
+		formatString: 0
+		lineageTag: 9bf4ea92-2d74-4e32-98c1-79a6e86fac12
+		summarizeBy: none
+		sourceColumn: parent_id
+
+		annotation SummarizationSetBy = User
+
+	column is_balancing
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 876e3f34-d1f0-4805-a4d1-3e287b01ad53
+		summarizeBy: none
+		sourceColumn: is_balancing
+
+		annotation SummarizationSetBy = Automatic
+
+	column depth
+		dataType: int64
+		formatString: 0
+		lineageTag: 6d84bbaa-088c-4628-ab3b-812c07968447
+		summarizeBy: none
+		sourceColumn: depth
+
+		annotation SummarizationSetBy = User
+
+	column market
+		dataType: string
+		lineageTag: 7580308b-d59f-49c4-a94d-da7664302d98
+		summarizeBy: none
+		sourceColumn: market
+
+		annotation SummarizationSetBy = Automatic
+
+	column continent
+		dataType: string
+		lineageTag: cf758913-a4d9-46b3-88ed-4b9ba60bca2e
+		summarizeBy: none
+		sourceColumn: continent
+
+		annotation SummarizationSetBy = Automatic
+
+	column region
+		dataType: string
+		lineageTag: c3dc2853-0612-441e-8883-7b70118af1c0
+		summarizeBy: none
+		sourceColumn: region
+
+		annotation SummarizationSetBy = Automatic
+
+	column country
+		dataType: string
+		lineageTag: ecd5a36c-a03d-4546-9b32-8c3704fa9d49
+		summarizeBy: none
+		sourceColumn: country
+
+		annotation SummarizationSetBy = Automatic
+
+	hierarchy Residence
+		lineageTag: 22e75cc2-8c36-4b5f-82c9-bfffcbd050c5
+
+		level market
+			lineageTag: e8623f82-a471-4ce2-a7ab-403d1fe5fc72
+			column: market
+
+		level continent
+			lineageTag: 7184b9d4-a0a7-47d3-a63b-c1e56d8c0e9f
+			column: continent
+
+		level region
+			lineageTag: 6ef30d5e-dc1c-4199-9820-5d99dc3bfd45
+			column: region
+
+		level country
+			lineageTag: f44aefa2-c15d-447b-affb-1efc8370125f
+			column: country
+
+	partition dim_country = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(
+				        File.Contents(ProcessedFolder & "dim_country.csv"),
+				        [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]
+				    ),
+				
+				    #"Use first row as headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				
+				    // Keys and depth as whole numbers; is_balancing as true/false;
+				    // the hierarchy levels as text
+				    #"Set column types" = Table.TransformColumnTypes(
+				        #"Use first row as headers",
+				        {
+				            {"member_id", Int64.Type},
+				            {"name", type text},
+				            {"parent_id", Int64.Type},
+				            {"is_balancing", type logical},
+				            {"depth", Int64.Type},
+				            {"market", type text},
+				            {"continent", type text},
+				            {"region", type text},
+				            {"country", type text}
+				        }
+				    )
+				in
+				    #"Set column types"
+
+	annotation PBI_ResultType = Table
+
